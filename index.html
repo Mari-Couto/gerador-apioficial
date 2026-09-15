@@ -44,7 +44,17 @@ function generateNote(){if(!validate())return;const cnpj=value('cnpj'),access=se
 document.addEventListener('change',e=>{if(e.target.matches('input[type=radio]'))updateConditional()});
 document.addEventListener('input',updateProgress);
 generateBtn.addEventListener('click',generateNote);
-document.getElementById('copyBtn').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(noteOutput.textContent);const b=document.getElementById('copyBtn'),o=b.textContent;b.textContent='✓ NOTA COPIADA';setTimeout(()=>b.textContent=o,1800)}catch{const r=document.createRange();r.selectNodeContents(noteOutput);const s=window.getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('copy');s.removeAllRanges()}});
+function buildPlainText(){
+const cnpj=value('cnpj'),access=selected('access'),sms=selected('sms'),whatsapp=selected('whatsapp'),numberType=selected('numberType'),ura=selected('ura'),facebook=selected('facebook'),bm=selected('bm'),site=selected('site'),siteOwner=selected('siteOwner'),history=selected('history'),calls=selected('calls'),groups=selected('groups'),apiType=selected('apiType'),obs=value('observations');
+const lines=['Dados da migração para a API Oficial','', '1. DADOS DA EMPRESA',`• CNPJ: ${cnpj}`,'', '2. NÚMERO VINCULADO AO CNPJ',`• Acesso ao número: ${access}`,`• Recebe SMS e ligações: ${sms}`,'', '3. NÚMERO A SER MIGRADO',`• Tipo: ${numberType}`,`• WhatsApp atual: ${whatsapp}`];
+if(numberType==='Fixo')lines.push(`• URA / secretária eletrônica: ${ura}`);
+lines.push('', '4. ESTRUTURA',`• Facebook: ${facebook}`,`• Possui BM: ${bm}`,`• Site: ${site}`);
+if(site==='Não')lines.push(`• Criação do site: ${siteOwner}`);
+lines.push('', '5. PONTOS IMPORTANTES PARA O CLIENTE',`• Histórico de conversas: ${yesNo(history,'Sim, é importante','Não é importante')}`,`• Ligações: ${yesNo(calls,'Sim, são importantes','Não são importantes')}`,`• Grupos de WhatsApp: ${yesNo(groups,'Sim, são importantes','Não são importantes')}`,'', '6. MODALIDADE',`• ${apiType}`);
+if(obs)lines.push('', '7. OBSERVAÇÕES', ...obs.split(/\r?\n/).map(line=>`• ${line}`));
+return lines.join('\n');
+}
+document.getElementById('copyBtn').addEventListener('click',async()=>{const text=buildPlainText();try{await navigator.clipboard.writeText(text)}catch{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}const b=document.getElementById('copyBtn'),o=b.textContent;b.textContent='✓ NOTA COPIADA';setTimeout(()=>b.textContent=o,1800)});
 document.getElementById('editBtn').addEventListener('click',()=>{result.classList.add('hidden');document.querySelector('.section[data-section="1"]').scrollIntoView({behavior:'smooth',block:'start'})});
 document.getElementById('cnpj').addEventListener('input',e=>{let v=e.target.value.replace(/\D/g,'').slice(0,14);if(v.length>12)v=v.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/,'$1.$2.$3/$4-$5');else if(v.length>8)v=v.replace(/(\d{2})(\d{3})(\d{3})(\d{0,4})/,'$1.$2.$3/$4');else if(v.length>5)v=v.replace(/(\d{2})(\d{3})(\d{0,3})/,'$1.$2.$3');else if(v.length>2)v=v.replace(/(\d{2})(\d{0,3})/,'$1.$2');e.target.value=v;updateProgress()});
 updateConditional();
