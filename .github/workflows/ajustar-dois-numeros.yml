@@ -1,0 +1,45 @@
+name: Ajustar dois números
+on:
+  push:
+    paths:
+      - '.github/workflows/ajustar-dois-numeros.yml'
+      - 'index.html'
+jobs:
+  update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          old='''<div class="question"><label class="question-label">O número recebe SMS e ligações? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="sms" value="Sim">SIM</label><label class="choice"><input type="radio" name="sms" value="Não">NÃO</label></div></div></section>'''
+          new='''<div class="question"><label class="question-label">O número recebe SMS e ligações? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="sms" value="Sim">SIM</label><label class="choice"><input type="radio" name="sms" value="Não">NÃO</label></div></div><div class="question"><label class="question-label">O número é: <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="linkedNumberType" value="Celular">Celular</label><label class="choice"><input type="radio" name="linkedNumberType" value="Fixo">Fixo</label></div></div><div class="question hidden" id="linkedUraQuestion"><label class="question-label">Possui URA / secretária eletrônica? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="linkedUra" value="Sim">SIM</label><label class="choice"><input type="radio" name="linkedUra" value="Não">NÃO</label></div></div></section>'''
+          if 'name="linkedNumberType"' not in s:
+              if old not in s: raise SystemExit('etapa 2 não encontrada')
+              s=s.replace(old,new,1)
+          s=s.replace("uraQuestion=document.getElementById('uraQuestion'),siteOwnerQuestion", "uraQuestion=document.getElementById('uraQuestion'),linkedUraQuestion=document.getElementById('linkedUraQuestion'),siteOwnerQuestion")
+          s=s.replace("const fixed=selected('numberType')==='Fixo';uraQuestion.classList.toggle('hidden',!fixed);if(!fixed)form.querySelectorAll('input[name=\"ura\"]').forEach(i=>i.checked=false);", "const fixed=selected('numberType')==='Fixo';uraQuestion.classList.toggle('hidden',!fixed);if(!fixed)form.querySelectorAll('input[name=\"ura\"]').forEach(i=>i.checked=false);const linkedFixed=selected('linkedNumberType')==='Fixo';linkedUraQuestion.classList.toggle('hidden',!linkedFixed);if(!linkedFixed)form.querySelectorAll('input[name=\"linkedUra\"]').forEach(i=>i.checked=false);")
+          s=s.replace("if(n===2)return!!selected('access')&&!!selected('sms');", "if(n===2)return!!selected('access')&&!!selected('sms')&&!!selected('linkedNumberType')&&(selected('linkedNumberType')!=='Fixo'||!!selected('linkedUra'));")
+          marker="function buildPlainText(){"
+          if marker not in s: raise SystemExit('buildPlainText não encontrado')
+          start=s.index(marker)
+          end=s.index("\ndocument.getElementById('copyBtn')",start)
+          fn=s[start:end]
+          fn=fn.replace("const cnpj=value('cnpj'),access=selected('access'),sms=selected('sms'),", "const cnpj=value('cnpj'),access=selected('access'),sms=selected('sms'),linkedNumberType=selected('linkedNumberType'),linkedUra=selected('linkedUra'),")
+          fn=fn.replace("`• Recebe SMS e ligações: ${sms}`,\n    '',", "`• Recebe SMS e ligações: ${sms}`,\n    `• Tipo: ${linkedNumberType}`,\n    '',")
+          fn=fn.replace("if(numberType==='Fixo') lines.push(`• URA / secretária eletrônica: ${ura}`);", "if(linkedNumberType==='Fixo') lines.splice(0,0,`• URA / secretária eletrônica: ${linkedUra}`);\n\n  if(numberType==='Fixo') lines.push(`• URA / secretária eletrônica: ${ura}`);")
+          # Move the linked URA into section 2 instead of the top by rebuilding that small portion.
+          fn=fn.replace("if(linkedNumberType==='Fixo') lines.splice(0,0,`• URA / secretária eletrônica: ${linkedUra}`);", "if(linkedNumberType==='Fixo'){ const i=lines.indexOf(''); lines.splice(i,0,`• URA / secretária eletrônica: ${linkedUra}`); }")
+          s=s[:start]+fn+s[end:]
+          p.write_text(s,encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || (git commit -m 'Adiciona dados do número vinculado ao CNPJ' && git push)
