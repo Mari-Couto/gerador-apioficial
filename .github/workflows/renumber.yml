@@ -1,0 +1,45 @@
+name: Adjust API form numbering
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  adjust:
+    if: "!contains(github.event.head_commit.message, 'Fix: etapa 3 dinâmica')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Adjust numbering and conditional URA
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          old='''<section class="section hidden" id="fixedSection" data-section="4">'''
+          start=s.find(old)
+          if start<0: raise SystemExit('fixedSection not found')
+          end=s.find('</section>',start)+len('</section>')
+          fixed=s[start:end]
+          ura_start=fixed.find('<div class="question">')
+          ura=fixed[ura_start:fixed.rfind('</section>')]
+          s=s[:start]+s[end:]
+          sec3_end=s.find('</section>',s.find('data-section="3"'))
+          ura=ura.replace('<div class="question">','<div class="question hidden" id="uraQuestion">',1)
+          s=s[:sec3_end]+ura+s[sec3_end:]
+          for a,b in [('5','4'),('6','5'),('7','6'),('8','7'),('9','8')]:
+              pos=s.find(f'data-section="{a}"')
+              if pos>=0:
+                  s=s[:pos]+s[pos:].replace(f'data-section="{a}"',f'data-section="{b}"',1)
+                  np=s.find(f'<div class="num">{a}</div>',pos)
+                  if np>=0: s=s[:np]+s[np:].replace(f'<div class="num">{a}</div>',f'<div class="num">{b}</div>',1)
+          s=s.replace("fixedSection.classList.toggle('hidden', !fixed);","uraQuestion.classList.toggle('hidden', !fixed);")
+          s=s.replace("if(num===4) return selected('numberType') === 'Fixo' ? !!selected('ura') : true;\n  if(num===5) return !!selected('facebook') && !!selected('bm');\n  if(num===6) return !!selected('site') && (selected('site') !== 'Não' || !!selected('siteOwner'));\n  if(num===7) return !!selected('history') && !!selected('calls') && !!selected('groups');\n  if(num===8) return !!selected('apiType');", "if(num===4) return !!selected('facebook') && !!selected('bm');\n  if(num===5) return !!selected('site') && (selected('site') !== 'Não' || !!selected('siteOwner'));\n  if(num===6) return !!selected('history') && !!selected('calls') && !!selected('groups');\n  if(num===7) return !!selected('apiType');")
+          s=s.replace("if(n===4 && selected('numberType')!=='Fixo') return;\n    if(n===9) return;","if(n===8) return;")
+          p.write_text(s,encoding='utf-8')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Fix: etapa 3 dinâmica"
+          git push
