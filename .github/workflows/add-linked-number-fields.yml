@@ -1,7 +1,9 @@
 name: Ajustar número vinculado ao CNPJ
 
 on:
-  workflow_dispatch:
+  push:
+    paths:
+      - '.trigger-linked-number'
 
 jobs:
   update:
@@ -20,27 +22,85 @@ jobs:
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
 
-          old = '''<section class="section" data-section="2"><div class="section-head"><div class="num">2</div><div class="section-title"><h2>Número vinculado ao CNPJ</h2><p>Informações sobre o acesso ao número cadastrado.</p></div><span class="status">Não preenchida</span></div><div class="question"><label class="question-label">O cliente possui acesso ao número? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="access" value="Sim">SIM</label><label class="choice"><input type="radio" name="access" value="Não">NÃO</label></div></div><div class="question"><label class="question-label">O número recebe SMS e ligações? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="sms" value="Sim">SIM</label><label class="choice"><input type="radio" name="sms" value="Não">NÃO</label></div></div></section>'''
+          marker = '<section class="section" data-section="2">'
+          start = s.find(marker)
+          end = s.find('</section>', start)
+          if start == -1 or end == -1:
+              raise SystemExit('Etapa 2 não encontrada.')
 
-          new = '''<section class="section" data-section="2"><div class="section-head"><div class="num">2</div><div class="section-title"><h2>Número vinculado ao CNPJ</h2><p>Informações sobre o número cadastrado no CNPJ.</p></div><span class="status">Não preenchida</span></div><div class="question"><label class="question-label">O cliente possui acesso ao número? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="access" value="Sim">SIM</label><label class="choice"><input type="radio" name="access" value="Não">NÃO</label></div></div><div class="question"><label class="question-label">O número recebe SMS e ligações? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="sms" value="Sim">SIM</label><label class="choice"><input type="radio" name="sms" value="Não">NÃO</label></div></div><div class="question"><label class="question-label">O número é: <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="linkedNumberType" value="Celular">Celular</label><label class="choice"><input type="radio" name="linkedNumberType" value="Fixo">Fixo</label></div></div><div class="question hidden" id="linkedUraQuestion"><label class="question-label">Possui URA / secretária eletrônica? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="linkedUra" value="Sim">SIM</label><label class="choice"><input type="radio" name="linkedUra" value="Não">NÃO</label></div></div></section>'''
+          block = s[start:end]
+          if 'name="linkedNumberType"' not in block:
+              insert = '''<div class="question"><label class="question-label">O número é: <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="linkedNumberType" value="Celular">Celular</label><label class="choice"><input type="radio" name="linkedNumberType" value="Fixo">Fixo</label></div></div><div class="question hidden" id="linkedUraQuestion"><label class="question-label">Possui URA / secretária eletrônica? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="linkedUra" value="Sim">SIM</label><label class="choice"><input type="radio" name="linkedUra" value="Não">NÃO</label></div></div>'''
+              s = s[:end] + insert + s[end:]
 
-          if old not in s:
-              raise SystemExit('Bloco da etapa 2 não encontrado.')
-          s = s.replace(old, new, 1)
+          extra = r'''<script>
+(function(){
+  function selected(name){
+    const el=document.querySelector('input[name="'+name+'"]:checked');
+    return el ? el.value : '';
+  }
+  function value(id){
+    const el=document.getElementById(id);
+    return el ? el.value.trim() : '';
+  }
+  function updateLinkedNumber(){
+    const type=selected('linkedNumberType');
+    const q=document.getElementById('linkedUraQuestion');
+    if(q) q.classList.toggle('hidden', type!=='Fixo');
+  }
+  function plainText(){
+    const cnpj=value('cnpj'), access=selected('access'), sms=selected('sms');
+    const linkedType=selected('linkedNumberType'), linkedUra=selected('linkedUra');
+    const whatsapp=selected('whatsapp'), numberType=selected('numberType'), ura=selected('ura');
+    const facebook=selected('facebook'), bm=selected('bm'), site=selected('site'), siteOwner=selected('siteOwner');
+    const history=selected('history'), calls=selected('calls'), groups=selected('groups'), apiType=selected('apiType'), obs=value('observations');
+    const lines=[
+      'Dados da migração para a API Oficial','',
+      '1. DADOS DA EMPRESA',`• CNPJ: ${cnpj}`,'',
+      '2. NÚMERO VINCULADO AO CNPJ',`• Acesso ao número: ${access}`,`• Recebe SMS e ligações: ${sms}`,`• Tipo: ${linkedType}`
+    ];
+    if(linkedType==='Fixo') lines.push(`• URA / secretária eletrônica: ${linkedUra}`);
+    lines.push('', '3. NÚMERO A SER MIGRADO', `• Tipo: ${numberType}`, `• WhatsApp atual: ${whatsapp}`);
+    if(numberType==='Fixo') lines.push(`• URA / secretária eletrônica: ${ura}`);
+    lines.push('', '4. ESTRUTURA', `• Facebook: ${facebook}`, `• Possui BM: ${bm}`, `• Site: ${site}`);
+    if(site==='Não') lines.push(`• Criação do site: ${siteOwner}`);
+    lines.push('', '5. PONTOS IMPORTANTES PARA O CLIENTE', `• Histórico de conversas: ${history==='Sim'?'Sim, é importante':'Não é importante'}`, `• Ligações: ${calls==='Sim'?'Sim, são importantes':'Não são importantes'}`, `• Grupos de WhatsApp: ${groups==='Sim'?'Sim, são importantes':'Não são importantes'}`, '', '6. MODALIDADE', `• ${apiType}`);
+    if(obs) lines.push('', '7. OBSERVAÇÕES', ...obs.split(/\r?\n/).map(x=>`• ${x}`));
+    return lines.join('\n');
+  }
+  function patchRenderedNote(){
+    const sections=document.querySelectorAll('.note-section');
+    const target=[...sections].find(x=>{
+      const t=x.querySelector('.note-section-title');
+      return t && t.textContent.includes('2. NÚMERO VINCULADO AO CNPJ');
+    });
+    if(!target || target.dataset.linkedPatched==='1') return;
+    const type=selected('linkedNumberType'), ura=selected('linkedUra');
+    if(!type) return;
+    const make=text=>{const d=document.createElement('p');d.className='note-item';d.textContent='• '+text;return d;};
+    const items=target.querySelectorAll('.note-item');
+    const sms=[...items].find(x=>x.textContent.includes('Recebe SMS e ligações'));
+    if(sms){sms.after(make('Tipo: '+type)); if(type==='Fixo') sms.parentNode.appendChild(make('URA / secretária eletrônica: '+ura));}
+    target.dataset.linkedPatched='1';
+  }
+  document.addEventListener('change',function(e){
+    if(e.target && (e.target.name==='linkedNumberType'||e.target.name==='linkedUra')) updateLinkedNumber();
+  });
+  document.addEventListener('DOMContentLoaded',function(){
+    updateLinkedNumber();
+    const generate=document.getElementById('generateBtn');
+    if(generate) generate.addEventListener('click',()=>setTimeout(patchRenderedNote,0));
+    const copy=document.getElementById('copyBtn');
+    if(copy) copy.addEventListener('click',async()=>{
+      const text=plainText();
+      try{await navigator.clipboard.writeText(text)}catch(e){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}
+    });
+  });
+})();
+</script>'''
 
-          s = s.replace("const uraQuestion = document.getElementById('uraQuestion');", "const uraQuestion = document.getElementById('uraQuestion');\nconst linkedUraQuestion = document.getElementById('linkedUraQuestion');")
-
-          marker = "const siteOwnerQuestion = document.getElementById('siteOwnerQuestion');"
-          if marker not in s:
-              raise SystemExit('Declaração esperada não encontrada.')
-
-          s = s.replace("const numberType = selected('numberType');\n  const site = selected('site');", "const numberType = selected('numberType');\n  const linkedNumberType = selected('linkedNumberType');\n  const site = selected('site');")
-          s = s.replace("uraQuestion.classList.toggle('hidden', numberType !== 'Fixo');", "uraQuestion.classList.toggle('hidden', numberType !== 'Fixo');\n  linkedUraQuestion.classList.toggle('hidden', linkedNumberType !== 'Fixo');")
-          s = s.replace("const ura = selected('ura');\n  const facebook", "const ura = selected('ura');\n  const linkedNumberType = selected('linkedNumberType');\n  const linkedUra = selected('linkedUra');\n  const facebook")
-          s = s.replace("const c3 = whatsapp && numberType && (numberType !== 'Fixo' || ura);", "const c2 = access && sms && linkedNumberType && (linkedNumberType !== 'Fixo' || linkedUra);\n  const c3 = whatsapp && numberType && (numberType !== 'Fixo' || ura);")
-          s = s.replace("case 2: return c3;", "case 2: return c2;\n      case 3: return c3;")
-          s = s.replace("`• Acesso ao número: ${access}`,\n    `• Recebe SMS e ligações: ${sms}`,\n    '',\n    '3. NÚMERO A SER MIGRADO',", "`• Acesso ao número: ${access}`,\n    `• Recebe SMS e ligações: ${sms}`,\n    `• Tipo: ${linkedNumberType}`,\n    '',\n    '3. NÚMERO A SER MIGRADO',")
-          s = s.replace("if(numberType==='Fixo') lines.push(`• URA / secretária eletrônica: ${ura}`);", "if(linkedNumberType==='Fixo') lines.splice(0, 0, `• URA / secretária eletrônica: ${linkedUra}`);\n  if(numberType==='Fixo') lines.push(`• URA / secretária eletrônica: ${ura}`);")
+          if 'function patchRenderedNote()' not in s:
+              s = s.replace('</body>', extra + '\n</body>')
 
           p.write_text(s, encoding='utf-8')
       - name: Commit
@@ -49,5 +109,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
           git diff --cached --quiet && exit 0
-          git commit -m "Ajusta dados do número vinculado ao CNPJ"
+          git commit -m "Adiciona dados do número vinculado ao CNPJ"
           git push
