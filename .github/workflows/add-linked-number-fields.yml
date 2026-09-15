@@ -1,0 +1,53 @@
+name: Ajustar número vinculado ao CNPJ
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Atualizar formulário
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+
+          old = '''<section class="section" data-section="2"><div class="section-head"><div class="num">2</div><div class="section-title"><h2>Número vinculado ao CNPJ</h2><p>Informações sobre o acesso ao número cadastrado.</p></div><span class="status">Não preenchida</span></div><div class="question"><label class="question-label">O cliente possui acesso ao número? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="access" value="Sim">SIM</label><label class="choice"><input type="radio" name="access" value="Não">NÃO</label></div></div><div class="question"><label class="question-label">O número recebe SMS e ligações? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="sms" value="Sim">SIM</label><label class="choice"><input type="radio" name="sms" value="Não">NÃO</label></div></div></section>'''
+
+          new = '''<section class="section" data-section="2"><div class="section-head"><div class="num">2</div><div class="section-title"><h2>Número vinculado ao CNPJ</h2><p>Informações sobre o número cadastrado no CNPJ.</p></div><span class="status">Não preenchida</span></div><div class="question"><label class="question-label">O cliente possui acesso ao número? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="access" value="Sim">SIM</label><label class="choice"><input type="radio" name="access" value="Não">NÃO</label></div></div><div class="question"><label class="question-label">O número recebe SMS e ligações? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="sms" value="Sim">SIM</label><label class="choice"><input type="radio" name="sms" value="Não">NÃO</label></div></div><div class="question"><label class="question-label">O número é: <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="linkedNumberType" value="Celular">Celular</label><label class="choice"><input type="radio" name="linkedNumberType" value="Fixo">Fixo</label></div></div><div class="question hidden" id="linkedUraQuestion"><label class="question-label">Possui URA / secretária eletrônica? <span class="req">*</span></label><div class="choice-grid"><label class="choice"><input type="radio" name="linkedUra" value="Sim">SIM</label><label class="choice"><input type="radio" name="linkedUra" value="Não">NÃO</label></div></div></section>'''
+
+          if old not in s:
+              raise SystemExit('Bloco da etapa 2 não encontrado.')
+          s = s.replace(old, new, 1)
+
+          s = s.replace("const uraQuestion = document.getElementById('uraQuestion');", "const uraQuestion = document.getElementById('uraQuestion');\nconst linkedUraQuestion = document.getElementById('linkedUraQuestion');")
+
+          marker = "const siteOwnerQuestion = document.getElementById('siteOwnerQuestion');"
+          if marker not in s:
+              raise SystemExit('Declaração esperada não encontrada.')
+
+          s = s.replace("const numberType = selected('numberType');\n  const site = selected('site');", "const numberType = selected('numberType');\n  const linkedNumberType = selected('linkedNumberType');\n  const site = selected('site');")
+          s = s.replace("uraQuestion.classList.toggle('hidden', numberType !== 'Fixo');", "uraQuestion.classList.toggle('hidden', numberType !== 'Fixo');\n  linkedUraQuestion.classList.toggle('hidden', linkedNumberType !== 'Fixo');")
+          s = s.replace("const ura = selected('ura');\n  const facebook", "const ura = selected('ura');\n  const linkedNumberType = selected('linkedNumberType');\n  const linkedUra = selected('linkedUra');\n  const facebook")
+          s = s.replace("const c3 = whatsapp && numberType && (numberType !== 'Fixo' || ura);", "const c2 = access && sms && linkedNumberType && (linkedNumberType !== 'Fixo' || linkedUra);\n  const c3 = whatsapp && numberType && (numberType !== 'Fixo' || ura);")
+          s = s.replace("case 2: return c3;", "case 2: return c2;\n      case 3: return c3;")
+          s = s.replace("`• Acesso ao número: ${access}`,\n    `• Recebe SMS e ligações: ${sms}`,\n    '',\n    '3. NÚMERO A SER MIGRADO',", "`• Acesso ao número: ${access}`,\n    `• Recebe SMS e ligações: ${sms}`,\n    `• Tipo: ${linkedNumberType}`,\n    '',\n    '3. NÚMERO A SER MIGRADO',")
+          s = s.replace("if(numberType==='Fixo') lines.push(`• URA / secretária eletrônica: ${ura}`);", "if(linkedNumberType==='Fixo') lines.splice(0, 0, `• URA / secretária eletrônica: ${linkedUra}`);\n  if(numberType==='Fixo') lines.push(`• URA / secretária eletrônica: ${ura}`);")
+
+          p.write_text(s, encoding='utf-8')
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Ajusta dados do número vinculado ao CNPJ"
+          git push
